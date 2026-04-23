@@ -270,4 +270,4 @@ web/                   React 前端
 
 ## License
 
-Private
+MIT
