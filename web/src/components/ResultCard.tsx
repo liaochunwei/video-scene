@@ -41,7 +41,7 @@ export function ResultCard({ result, isActive, onClick, onSimilar, hideSimilar }
                     <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-zinc-200 truncate">{result.filename}</span>
                         <span className="text-xs font-mono text-zinc-500 flex-shrink-0">
-                            {formatTime(result.start_time)} - {formatTime(result.end_time)}
+                            {formatTime(result.start_time ?? 0)} - {formatTime(result.end_time ?? 0)}
                         </span>
                     </div>
 

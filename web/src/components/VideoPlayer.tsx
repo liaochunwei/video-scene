@@ -26,15 +26,17 @@ export function VideoPlayer({ result, paused }: VideoPlayerProps) {
     const thumbnails: SegmentThumb[] = result
         ? [
               {
-                  start_time: result.start_time,
-                  end_time: result.end_time,
+                  start_time: result.start_time ?? 0,
+                  end_time: result.end_time ?? 0,
                   keyframe_url: result.keyframe_url,
               },
-              ...result.more.map((m: MoreSegment) => ({
-                  start_time: m.start_time,
-                  end_time: m.end_time,
-                  keyframe_url: m.keyframe_url,
-              })),
+              ...result.more
+                  .filter((m) => m.start_time != null && m.end_time != null)
+                  .map((m: MoreSegment) => ({
+                      start_time: m.start_time!,
+                      end_time: m.end_time!,
+                      keyframe_url: m.keyframe_url,
+                  })),
           ]
         : [];
 
@@ -59,7 +61,7 @@ export function VideoPlayer({ result, paused }: VideoPlayerProps) {
         video.addEventListener(
             'loadedmetadata',
             () => {
-                video.currentTime = result.start_time;
+                video.currentTime = result.start_time ?? 0;
                 video.pause();
             },
             { once: true }
@@ -69,6 +71,7 @@ export function VideoPlayer({ result, paused }: VideoPlayerProps) {
     const seekToSegment = useCallback(
         (index: number) => {
             const video = videoRef.current;
+            if (index < 0 || index >= thumbnails.length) return;
             const seg = thumbnails[index];
             if (!video || !seg) return;
             video.currentTime = seg.start_time;
@@ -78,12 +81,20 @@ export function VideoPlayer({ result, paused }: VideoPlayerProps) {
         [thumbnails]
     );
 
+    // Clamp activeIndex to valid range (guards against stale index after result change)
+    const safeIndex = Math.min(activeIndex, thumbnails.length - 1);
+    const activeSeg = thumbnails[safeIndex];
+
     if (!result) {
         return (
             <div className="flex items-center justify-center h-full bg-zinc-950 rounded-lg">
                 <p className="text-zinc-500">点击结果卡片预览视频</p>
             </div>
         );
+    }
+
+    if (!activeSeg) {
+        return null;
     }
 
     const showThumbnails = thumbnails.length > 1;
@@ -95,8 +106,8 @@ export function VideoPlayer({ result, paused }: VideoPlayerProps) {
                 <video ref={videoRef} controls className="w-full rounded-lg bg-black" />
                 <div className="absolute top-2 left-2">
                     <Badge variant="secondary" className="font-mono text-xs bg-black/70 text-white border-0">
-                        {formatTime(thumbnails[activeIndex].start_time)} -{' '}
-                        {formatTime(thumbnails[activeIndex].end_time)}
+                        {formatTime(activeSeg.start_time)} -{' '}
+                        {formatTime(activeSeg.end_time)}
                     </Badge>
                 </div>
             </div>
@@ -109,7 +120,7 @@ export function VideoPlayer({ result, paused }: VideoPlayerProps) {
                             key={i}
                             onClick={() => seekToSegment(i)}
                             className={`relative rounded overflow-hidden shrink-0 ${
-                                i === activeIndex ? 'ring-2 ring-blue-500' : 'ring-1 ring-zinc-700'
+                                i === safeIndex ? 'ring-2 ring-blue-500' : 'ring-1 ring-zinc-700'
                             }`}
                         >
                             <img

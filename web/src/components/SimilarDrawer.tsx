@@ -49,7 +49,7 @@ export function SimilarDrawer({ open, results, loading, onClose }: SimilarDrawer
                         )}
                         {results.map((r, i) => (
                             <ResultCard
-                                key={`${r.video_id}-${r.start_time}-${i}`}
+                                key={`${r.video_id}-${r.start_time ?? 0}-${i}`}
                                 result={r}
                                 isActive={
                                     activeResult?.video_id === r.video_id && activeResult?.start_time === r.start_time
