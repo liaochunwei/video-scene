@@ -236,7 +236,11 @@ enum Commands {
     /// 显示索引状态（视频数、片段数、人脸数）
     Status,
     /// 列出所有已索引的视频
-    List,
+    List {
+        /// 只显示视频数量，不列出详细列表
+        #[arg(short, long)]
+        count: bool,
+    },
     /// 移除指定视频的索引记录，或用 --all 清空整个索引
     Remove {
         /// 要移除的视频路径（使用 --all 时不需要）
@@ -789,17 +793,23 @@ fn main() -> anyhow::Result<()> {
             let video_count = storage.workspace_db.video_count()?;
             let segment_count = storage.workspace_db.segment_count()?;
             let face_count = storage.config_db.list_faces()?.len();
-            let workspace_name = cli.workspace.as_deref().unwrap_or("default");
+            let state = video_scene::config::StateFile::load(&settings.index.config_dir);
+            let workspace_name = cli.workspace.as_deref().unwrap_or(&state.active_workspace);
             println!("{}", format_status(video_count, segment_count, face_count, &storage.workspace_path.to_string_lossy(), workspace_name));
         }
 
-        Some(Commands::List) => {
+        Some(Commands::List { count }) => {
             let storage = video_scene::storage::Storage::open(&settings, cli.workspace.as_deref())?;
-            let videos = storage.workspace_db.list_videos()?;
-            if videos.is_empty() {
-                println!("No videos indexed.");
+            if count {
+                let n = storage.workspace_db.video_count()?;
+                println!("{}", n);
             } else {
-                print!("{}", format_video_list(&videos));
+                let videos = storage.workspace_db.list_videos()?;
+                if videos.is_empty() {
+                    println!("No videos indexed.");
+                } else {
+                    print!("{}", format_video_list(&videos));
+                }
             }
         }
 
