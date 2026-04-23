@@ -1,0 +1,14 @@
+[plugin]
+name = "embedding"
+version = "1.0.0"
+type = "text_vectorization"
+description = "Text vectorization using Harrier ONNX model"
+
+[runtime]
+command = "uv run python -m embedding_plugin.main"
+idle_timeout = 600
+startup_timeout = 30
+
+[capabilities]
+actions = ["encode_text", "encode_texts_batch", "encode_document", "encode_documents_batch", "encode_text_with_categories"]
+max_batch_size = 64

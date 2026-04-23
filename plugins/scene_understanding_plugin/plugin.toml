@@ -1,0 +1,14 @@
+[plugin]
+name = "scene_understanding"
+version = "1.0.0"
+type = "image_text_understanding"
+description = "Scene understanding using local Qwen VLM"
+
+[runtime]
+command = "uv run python -m scene_understanding.main"
+idle_timeout = 600
+startup_timeout = 60
+
+[capabilities]
+actions = ["describe_scene", "describe_scenes_batch"]
+max_batch_size = 1

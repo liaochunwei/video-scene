@@ -1,0 +1,57 @@
+# production
+/build
+/target
+dist/
+.wheelshim
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# Python
+*.py[cod]
+*$py.class
+uv.lock
+venv/
+.venv/
+providers.json
+
+# Logs
+logs/
+*.log
+package-lock.json
+pnpm-lock.yaml
+
+# misc
+.env
+.env.*
+providers.json
+envs.json
+!.env.example
+!.env.template
+__pycache__/
+*.db
+*.rdb
+*.egg-info/
+*.zip
+config.json
+
+# vibe coding
+AGENTS.md
+.claude
+openspec
+CLAUDE.md
+*.tmp
+
+# App
+plugins/models/
+plugins/uv.lock
+web/node_modules/
+web/dist/

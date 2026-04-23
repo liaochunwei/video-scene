@@ -1,0 +1,23 @@
+[project]
+name = "video-scene-plugins"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "insightface>=0.7",
+    "onnxruntime>=1.16",
+    "ultralytics>=8.0",
+    "cn-clip>=1.0",
+    "modelscope>=1.0",
+    "scenedetect[opencv]>=0.6",
+    "torch>=2.0",
+    "torchvision>=0.15",
+    "opencv-python>=4.8",
+    "numpy>=1.24",
+    "Pillow>=10.0",
+    "coremltools>=9.0",
+    "numpy>=1.14.5,<=2.3.5",
+    "clip @ git+https://github.com/openai/CLIP.git",
+    "mlx-vlm>=0.1",
+    "transformers>=4.40",
+    "huggingface_hub>=0.20",
+]

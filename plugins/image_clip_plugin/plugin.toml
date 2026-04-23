@@ -1,0 +1,14 @@
+[plugin]
+name = "image_clip"
+version = "1.0.0"
+type = "image_text_vectorization"
+description = "Image-text vectorization using CLIP"
+
+[runtime]
+command = "uv run python -m image_clip.main"
+idle_timeout = 180
+startup_timeout = 30
+
+[capabilities]
+actions = ["encode_image", "encode_images_batch"]
+max_batch_size = 16

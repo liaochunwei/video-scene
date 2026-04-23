@@ -1,0 +1,14 @@
+[plugin]
+name = "scene_detect"
+version = "1.0.0"
+type = "video_segmentation"
+description = "Video scene segmentation using PySceneDetect"
+
+[runtime]
+command = "uv run python -m scene_detect_plugin.main"
+idle_timeout = 120
+startup_timeout = 15
+
+[capabilities]
+actions = ["detect_scenes"]
+max_batch_size = 1

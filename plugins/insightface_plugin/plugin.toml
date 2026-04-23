@@ -1,0 +1,14 @@
+[plugin]
+name = "insightface"
+version = "1.0.0"
+type = "face"
+description = "Face detection and recognition using InsightFace"
+
+[runtime]
+command = "uv run python -m insightface_plugin.main"
+idle_timeout = 300
+startup_timeout = 30
+
+[capabilities]
+actions = ["detect", "detect_batch", "encode"]
+max_batch_size = 16

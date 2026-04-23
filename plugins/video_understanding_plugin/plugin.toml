@@ -1,0 +1,13 @@
+[plugin]
+name = "video_understanding"
+type = "video_understanding"
+description = "Video understanding via cloud VLM API"
+
+[runtime]
+command = "uv run python -m video_understanding.main"
+startup_timeout = 60
+idle_timeout = 600
+
+[capabilities]
+actions = ["describe_video"]
+max_batch_size = 1
