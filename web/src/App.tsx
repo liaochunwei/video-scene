@@ -106,7 +106,7 @@ export default function App() {
                     {!currentQuery && <div className="text-center text-zinc-600 py-8 text-sm">输入搜索词开始搜索</div>}
                     {results.map((r, i) => (
                         <ResultCard
-                            key={`${r.video_id}-${r.start_time}-${i}`}
+                            key={`${r.video_id}-${r.start_time ?? 0}-${i}`}
                             result={r}
                             isActive={
                                 activeResult?.video_id === r.video_id && activeResult?.start_time === r.start_time

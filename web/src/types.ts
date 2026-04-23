@@ -1,7 +1,7 @@
 export interface MoreSegment {
     segment_id: string;
-    start_time: number;
-    end_time: number;
+    start_time?: number;
+    end_time?: number;
     confidence: number;
     keyframe_url: string;
 }
@@ -9,8 +9,8 @@ export interface MoreSegment {
 export interface SearchResult {
     video_id: string;
     filename: string;
-    start_time: number;
-    end_time: number;
+    start_time?: number;
+    end_time?: number;
     keyframe_url: string;
     confidence: number;
     confidence_low: number;
