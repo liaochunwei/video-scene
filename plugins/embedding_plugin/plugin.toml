@@ -6,8 +6,9 @@ description = "Text vectorization using Harrier ONNX model"
 
 [runtime]
 command = "uv run python -m embedding_plugin.main"
+# uv run 首次启动需要解析依赖/创建虚拟环境，可能较慢
 idle_timeout = 600
-startup_timeout = 30
+startup_timeout = 120
 
 [capabilities]
 actions = ["encode_text", "encode_texts_batch", "encode_document", "encode_documents_batch", "encode_text_with_categories"]

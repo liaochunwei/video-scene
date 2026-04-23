@@ -5,9 +5,10 @@ type = "image_text_understanding"
 description = "Scene understanding using local Qwen VLM"
 
 [runtime]
-command = "uv run python -m scene_understanding.main"
+command = "uv run python -m scene_understanding_plugin.main"
+# uv run 首次启动需要解析依赖/创建虚拟环境，可能较慢
 idle_timeout = 600
-startup_timeout = 60
+startup_timeout = 120
 
 [capabilities]
 actions = ["describe_scene", "describe_scenes_batch"]

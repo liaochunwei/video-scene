@@ -5,9 +5,10 @@ type = "image_text_vectorization"
 description = "Image-text vectorization using CLIP"
 
 [runtime]
-command = "uv run python -m image_clip.main"
+command = "uv run python -m image_clip_plugin.main"
+# uv run 首次启动需要解析依赖/创建虚拟环境，可能较慢
 idle_timeout = 180
-startup_timeout = 30
+startup_timeout = 120
 
 [capabilities]
 actions = ["encode_image", "encode_images_batch"]

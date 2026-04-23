@@ -1,11 +1,13 @@
 [plugin]
 name = "video_understanding"
+version = "1.0.0"
 type = "video_understanding"
 description = "Video understanding via cloud VLM API"
 
 [runtime]
-command = "uv run python -m video_understanding.main"
-startup_timeout = 60
+command = "uv run python -m video_understanding_plugin.main"
+# uv run 首次启动需要解析依赖/创建虚拟环境，可能较慢
+startup_timeout = 120
 idle_timeout = 600
 
 [capabilities]

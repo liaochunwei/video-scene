@@ -59,19 +59,35 @@ impl PluginProcess {
             format!("Empty command for plugin {}", plugin_name)
         ))?.clone();
         let child_args: Vec<&str> = args[1..].iter().map(|s| s.as_str()).collect();
-        let child = std::process::Command::new(&program)
+        let mut child = std::process::Command::new(&program)
             .args(&child_args)
             .current_dir(plugins_dir) // 工作目录设为插件所在目录，方便 Python 导入
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped()) // 捕获 stderr，超时时输出帮助诊断
             .spawn()
             .map_err(|e| crate::error::VideoSceneError::PluginExecutionError(
                 format!("Failed to start plugin {}: {}", plugin_name, e)
             ))?;
 
         // 等待子进程连接到 socket
-        let (socket, _) = Self::wait_for_connection(&listener, &socket_path, config.runtime.startup_timeout)?;
+        let (socket, _) = Self::wait_for_connection(&listener, &socket_path, config.runtime.startup_timeout, &mut child)?;
+
+        // 启动后台线程持续读取插件 stderr 并转发到 Rust 日志
+        // 这样 Python 端的 print(..., file=sys.stderr) 能被 Rust 看到
+        if let Some(stderr) = child.stderr.take() {
+            let name = plugin_name.clone();
+            std::thread::spawn(move || {
+                use std::io::{BufRead, BufReader};
+                let reader = BufReader::new(stderr);
+                for line in reader.lines() {
+                    match line {
+                        Ok(l) if !l.is_empty() => tracing::info!("[{}] {}", name, l),
+                        _ => break,
+                    }
+                }
+            });
+        }
 
         // 读取注册消息，验证插件声明的类型与配置一致
         let mut reader = BufReader::new(
@@ -118,19 +134,21 @@ impl PluginProcess {
 
     /// 等待子进程连接到 socket，带超时。
     /// 用非阻塞 + 轮询实现，避免阻塞整个线程。
+    /// 超时时读取子进程 stderr 输出帮助诊断（如 uv 依赖安装慢、Python 导入错误等）。
     fn wait_for_connection(
         listener: &UnixListener,
         socket_path: &PathBuf,
         timeout_secs: u64,
+        child: &mut std::process::Child,
     ) -> crate::error::Result<(std::os::unix::net::UnixStream, std::os::unix::net::SocketAddr)> {
         let start = Instant::now();
         listener.set_nonblocking(true)
             .map_err(|e| crate::error::VideoSceneError::PluginExecutionError(e.to_string()))?;
+
         loop {
             match listener.accept() {
                 Ok((stream, addr)) => {
                     listener.set_nonblocking(false).ok();
-                    // 确保接受的连接也是阻塞模式，后续读写更简单
                     stream.set_nonblocking(false)
                         .map_err(|e| crate::error::VideoSceneError::PluginExecutionError(e.to_string()))?;
                     return Ok((stream, addr));
@@ -142,12 +160,19 @@ impl PluginProcess {
                             format!("Failed to accept connection: {}", e)
                         ));
                     }
-                    // 超时检查
                     if start.elapsed() > Duration::from_secs(timeout_secs) {
                         let _ = std::fs::remove_file(socket_path);
-                        return Err(crate::error::VideoSceneError::PluginTimeout(
-                            format!("Plugin did not connect within {} seconds", timeout_secs)
-                        ));
+
+                        // 收集诊断信息：子进程是否还活着
+                        let alive = child.try_wait().map(|s| s.is_none()).unwrap_or(false);
+
+                        let mut detail = format!("Plugin did not connect within {} seconds", timeout_secs);
+                        if alive {
+                            detail.push_str(" (process is still running — likely slow startup, consider increasing startup_timeout in plugin.toml)");
+                        } else {
+                            detail.push_str(" (process has exited prematurely)");
+                        }
+                        return Err(crate::error::VideoSceneError::PluginTimeout(detail));
                     }
                     std::thread::sleep(Duration::from_millis(100));
                 }
@@ -172,6 +197,9 @@ impl PluginProcess {
             data: data.clone(),
         };
 
+        // 调用开始时立即更新 last_used，防止 check_idle 误杀正在处理请求的插件
+        self.last_used = Instant::now();
+
         protocol::write_message(&mut self.socket, &request)?;
 
         // 克隆 socket 用于读取（Unix Socket 支持独立读写）
@@ -182,9 +210,9 @@ impl PluginProcess {
         let result_value;
 
         loop {
-            let msg = protocol::read_message(&mut reader)?;
+            let msg = protocol::read_message(&mut reader);
             match msg {
-                PluginMessage::Progress { id, message, current, total } => {
+                Ok(PluginMessage::Progress { id, message, current, total }) => {
                     let pm = super::ProgressMessage {
                         id,
                         message,
@@ -194,20 +222,32 @@ impl PluginProcess {
                     progress_cb(pm.clone()); // 实时通知调用方
                     progress_messages.push(pm);
                 }
-                PluginMessage::Response { id, data } => {
+                Ok(PluginMessage::Response { id, data }) => {
                     if id != request_id {
                         tracing::warn!("Response ID mismatch: expected {}, got {}", request_id, id);
                     }
                     result_value = data;
                     break;
                 }
-                PluginMessage::Error { id: _, error } => {
+                Ok(PluginMessage::Error { id: _, error }) => {
                     return Err(crate::error::VideoSceneError::PluginExecutionError(
                         format!("Plugin {} error: {}", self.config.plugin.name, error)
                     ));
                 }
-                _ => {
-                    tracing::warn!("Unexpected message from plugin: {:?}", msg);
+                Ok(other) => {
+                    tracing::warn!("Unexpected message from plugin: {:?}", other);
+                }
+                Err(e) => {
+                    // 插件进程可能已崩溃，检查存活状态并输出诊断信息
+                    let alive = self.is_alive();
+                    tracing::error!(
+                        "Plugin {} socket read error: {} (process alive: {})",
+                        self.config.plugin.name, e, alive
+                    );
+                    return Err(crate::error::VideoSceneError::PluginExecutionError(
+                        format!("Plugin {} connection lost: {} (process alive: {})",
+                            self.config.plugin.name, e, alive)
+                    ));
                 }
             }
         }

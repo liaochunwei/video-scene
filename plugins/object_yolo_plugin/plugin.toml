@@ -5,9 +5,10 @@ type = "object"
 description = "Object detection using YOLOE"
 
 [runtime]
-command = "uv run python -m object_yolo.main"
+command = "uv run python -m object_yolo_plugin.main"
+# uv run 首次启动需要解析依赖/创建虚拟环境，可能较慢
 idle_timeout = 300
-startup_timeout = 30
+startup_timeout = 120
 
 [capabilities]
 actions = ["detect", "detect_batch"]

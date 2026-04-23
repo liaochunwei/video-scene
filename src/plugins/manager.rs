@@ -122,6 +122,7 @@ impl PluginManager {
     }
 
     /// 调用插件。如果进程未运行或已崩溃，自动启动。
+    /// 如果调用过程中插件崩溃（Socket closed），自动重启并重试一次。
     /// 懒启动策略：只在真正需要时才消耗资源拉起进程。
     pub fn call(
         &mut self,
@@ -139,7 +140,23 @@ impl PluginManager {
             entry.process = Some(process);
         }
 
-        entry.process.as_mut().unwrap().call(action, data, progress_cb)
+        match entry.process.as_mut().unwrap().call(action, data, progress_cb) {
+            Ok(resp) => Ok(resp),
+            Err(e) => {
+                // 调用失败，检查插件是否已崩溃
+                let alive = entry.process.as_mut().map(|p| p.is_alive()).unwrap_or(false);
+                if !alive {
+                    // 插件已崩溃，尝试重启并重试一次
+                    tracing::warn!("Plugin {} crashed during call, restarting and retrying: {}", entry.config.plugin.name, e);
+                    let process = PluginProcess::start(&entry.config, &self.socket_dir, &self.plugins_dir)?;
+                    entry.process = Some(process);
+                    entry.process.as_mut().unwrap().call(action, data, progress_cb)
+                } else {
+                    // 插件仍在运行但调用失败（如 action 不存在），不重试
+                    Err(e)
+                }
+            }
+        }
     }
 
     /// 检查所有插件的空闲时间，超时的进程会被停止并释放资源。

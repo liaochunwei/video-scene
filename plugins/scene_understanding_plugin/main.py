@@ -5,7 +5,7 @@ sys.path.insert(0, str(__import__('pathlib').Path(__file__).parent.parent))
 from plugin_sdk import run_plugin
 
 # Model storage directory: plugins/models/vlm/
-_MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "scene_understanding")
+_MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "vlm")
 
 _model = None
 _processor = None

@@ -124,6 +124,7 @@ pub fn run() -> crate::error::Result<()> {
         // 分发请求
         let response = match request {
             DaemonRequest::Call { plugin_type, action, data } => {
+                tracing::info!("Daemon call: type={}, action={}", plugin_type, action);
                 let pt = match parse_plugin_type(&plugin_type) {
                     Ok(pt) => pt,
                     Err(e) => {
@@ -131,7 +132,12 @@ pub fn run() -> crate::error::Result<()> {
                         continue;
                     }
                 };
-                match manager.call(pt, &action, &data, &|_| {}) {
+                let call_result = manager.call(pt, &action, &data, &|_| {});
+                match &call_result {
+                    Ok(_) => tracing::info!("Daemon call OK: type={}, action={}", plugin_type, action),
+                    Err(e) => tracing::error!("Daemon call FAILED: type={}, action={}, error={}", plugin_type, action, e),
+                }
+                match call_result {
                     Ok(resp) => {
                         // 将内部 ProgressMessage 转为协议层的 ProgressEntry
                         let progress: Vec<super::protocol::ProgressEntry> = resp.progress.into_iter()
