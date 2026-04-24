@@ -172,9 +172,6 @@ enum Commands {
         /// 强制重新索引（即使已有记录）
         #[arg(long)]
         force: bool,
-        /// 并行索引线程数
-        #[arg(long, default_value_t = 4)]
-        parallel: usize,
         /// 最小片段时长（秒），短于此值的片段会被合并
         #[arg(long, default_value_t = 2.0)]
         min_seg: f32,
@@ -436,7 +433,7 @@ fn main() -> anyhow::Result<()> {
     };
 
     match cli.command {
-        Some(Commands::Index { path, recursive, extensions, force, parallel, min_seg, max_seg, mode }) => {
+        Some(Commands::Index { path, recursive, extensions, force, min_seg, max_seg, mode }) => {
             // 命令行参数覆盖配置文件中的片段时长设置
             let mut settings = settings;
             settings.index.scene.min_segment_duration = min_seg;
@@ -470,13 +467,14 @@ fn main() -> anyhow::Result<()> {
                 }
                 eprintln!("Done.");
             } else if video_path.is_dir() {
-                // 目录索引：批量处理，支持递归和并行
                 eprintln!("Indexing directory: {}", path);
-                video_scene::core::indexer::index_directory(
-                    &video_path, &settings, &storage.workspace_db, &storage.file_store, recursive, &exts, parallel, force, is_video_mode,
+                let summary = video_scene::core::indexer::index_directory(
+                    &video_path, &settings, &storage.workspace_db, &storage.file_store,
+                    &mut storage.face_index, &mut storage.scene_indices, &mut storage.image_index,
+                    recursive, &exts, force, is_video_mode,
                     &*progress_cb,
                 )?;
-                eprintln!("Done.");
+                println!("{}", summary);
             } else {
                 anyhow::bail!("Path does not exist: {}", path);
             }

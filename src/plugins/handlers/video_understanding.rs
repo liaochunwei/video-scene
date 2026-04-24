@@ -69,14 +69,22 @@ fn parse_vlm_api_segment(value: &serde_json::Value) -> VlmApiSegment {
     let end_time = obj.get("片段结束").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
 
     // 将"标识"数组拆分为标识标记和字幕：
-    // 以"字幕-"开头的归入字幕，其余归入标识
+    // 以"字幕"开头（不管后面跟什么分隔符）的归入字幕，其余归入标识
     let all_marks: Vec<String> = obj.get("标识").and_then(|v| v.as_array())
         .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
         .unwrap_or_default();
 
     let (marks, subtitles): (Vec<String>, Vec<String>) = all_marks
         .into_iter()
-        .partition(|s| !s.starts_with("字幕-"));
+        .partition(|s| !s.trim().starts_with("字幕"));
+
+    // 去掉字幕条目的"字幕"前缀和分隔符
+    let subtitles: Vec<String> = subtitles.into_iter().map(|s| {
+        let trimmed = s.trim();
+        let text = trimmed.strip_prefix("字幕").unwrap_or(trimmed);
+        text.trim_start_matches(|c: char| c == ' ' || c == '-' || c == '‑' || c == '–' || c == '—' || c == '：' || c == ':')
+            .to_string()
+    }).collect();
 
     // 构造与本地 VLM 相同格式的 JSON，复用 parse_structured_response 解析逻辑
     let description = parse_structured_response(&serde_json::Value::Object({

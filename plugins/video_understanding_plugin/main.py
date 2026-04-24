@@ -211,7 +211,7 @@ def describe_video(data, options, send_progress):
         max_retries = 3
         segments = None
         for attempt in range(max_retries + 1):
-            temp = 0.6 + attempt * 0.1
+            temp = 0.7 + attempt * 0.1
             raw_text = _call_api(api_base, api_key, model, messages, temperature=temp)
             raw_text = _strip_thinking(raw_text)
             segments = _parse_segments(raw_text)

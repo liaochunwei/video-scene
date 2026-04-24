@@ -75,8 +75,7 @@ def fix_misplaced_subtitles(structured):
     """将标识中误放的字幕条目移到字幕字段。
 
     VLM 有时会把字幕内容输出到标识数组里，这里做后处理修正：
-    - 以"字幕-"开头的条目视为字幕，提取"字幕-"后面的部分作为字幕文本
-    - 不以"字幕-"开头但内容明显是字幕的（如纯文字描述），也移到字幕
+    - 以"字幕"开头的条目视为字幕，跳过"字幕"后的分隔符提取实际文本
     - 只有当字幕字段当前为空时才迁移，避免重复
     """
     marks = structured.get("标识", [])
@@ -85,16 +84,15 @@ def fix_misplaced_subtitles(structured):
     if not marks:
         return
 
-    # 拆分：以"字幕-"开头的归入字幕，其余保留在标识
     new_marks = []
     moved_subtitles = []
     for item in marks:
-        if item.startswith("字幕-"):
-            # 去掉"字幕-"前缀，保留实际字幕文本
-            moved_subtitles.append(item[len("字幕-"):])
-        elif item.startswith("字幕"):
-            # "字幕xxx" 形式也视为字幕
-            moved_subtitles.append(item[len("字幕"):])
+        stripped = item.strip()
+        if stripped.startswith("字幕"):
+            # 跳过"字幕"后的分隔符（-、空格、:、等任意组合）
+            text = stripped[len("字幕"):]
+            text = text.lstrip(" -‑–—：:")
+            moved_subtitles.append(text)
         else:
             new_marks.append(item)
 

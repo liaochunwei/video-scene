@@ -25,6 +25,7 @@ indicatif = "0.17"
 jieba-rs = "0.9"
 crossbeam-channel = "0.5"
 libc = "0.2"
+ctrlc = "3"
 axum = "0.8"
 tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
 rust-embed = "8"

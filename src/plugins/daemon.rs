@@ -104,10 +104,13 @@ pub fn run() -> crate::error::Result<()> {
 
         let request: DaemonRequest = {
             let mut line = String::new();
-            let bytes = reader.read_line(&mut line)
-                .map_err(|e| crate::error::VideoSceneError::PluginExecutionError(
-                    format!("Failed to read from client: {}", e)
-                ))?;
+            let bytes = match reader.read_line(&mut line) {
+                Ok(n) => n,
+                Err(e) => {
+                    tracing::warn!("Failed to read from client: {}", e);
+                    continue;
+                }
+            };
             if bytes == 0 {
                 continue; // 客户端断开，忽略
             }
@@ -115,10 +118,13 @@ pub fn run() -> crate::error::Result<()> {
             if line.is_empty() {
                 continue;
             }
-            serde_json::from_str(line)
-                .map_err(|e| crate::error::VideoSceneError::PluginExecutionError(
-                    format!("Invalid JSON from client: {} (line: {})", e, line)
-                ))?
+            match serde_json::from_str(line) {
+                Ok(req) => req,
+                Err(e) => {
+                    tracing::warn!("Invalid JSON from client: {} (line: {})", e, line);
+                    continue;
+                }
+            }
         };
 
         // 分发请求
@@ -207,6 +213,7 @@ pub fn run() -> crate::error::Result<()> {
 }
 
 /// 向客户端写入 NDJSON 响应。
+/// 客户端可能已断开（如 Ctrl+C），Broken pipe 不应中止守护进程。
 fn write_response(
     stream: &mut std::os::unix::net::UnixStream,
     response: &DaemonResponse,
@@ -214,14 +221,24 @@ fn write_response(
     let line = serde_json::to_string(response)
         .map_err(|e| crate::error::VideoSceneError::PluginExecutionError(e.to_string()))?;
     use std::io::Write;
-    writeln!(stream, "{}", line)
-        .map_err(|e| crate::error::VideoSceneError::PluginExecutionError(
+    if let Err(e) = writeln!(stream, "{}", line) {
+        if e.kind() == std::io::ErrorKind::BrokenPipe {
+            tracing::warn!("Client disconnected before response was sent");
+            return Ok(());
+        }
+        return Err(crate::error::VideoSceneError::PluginExecutionError(
             format!("Failed to write to client: {}", e)
-        ))?;
-    stream.flush()
-        .map_err(|e| crate::error::VideoSceneError::PluginExecutionError(
+        ));
+    }
+    if let Err(e) = stream.flush() {
+        if e.kind() == std::io::ErrorKind::BrokenPipe {
+            tracing::warn!("Client disconnected before response was flushed");
+            return Ok(());
+        }
+        return Err(crate::error::VideoSceneError::PluginExecutionError(
             format!("Failed to flush client: {}", e)
-        ))?;
+        ));
+    }
     Ok(())
 }
 
