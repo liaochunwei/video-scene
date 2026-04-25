@@ -72,6 +72,19 @@ enum WorkspaceAction {
         /// 要激活的工作区名称
         name: String,
     },
+    /// 打包工作区数据到 tar.gz 归档
+    Backup {
+        /// 备份文件路径（.tar.gz）
+        output: String,
+        /// 工作区名称，缺省为当前激活工作区
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// 从 tar.gz 归档导入数据到当前工作区
+    Import {
+        /// 备份文件路径（.tar.gz）
+        backup: String,
+    },
 }
 
 /// 人脸库管理子命令
@@ -128,6 +141,16 @@ enum FaceAction {
         /// 自动保存模式：新发现的人脸自动命名为 person_N
         #[arg(long)]
         auto_save: bool,
+    },
+    /// 打包人脸库到 tar.gz 归档
+    Backup {
+        /// 备份文件路径（.tar.gz）
+        output: String,
+    },
+    /// 从 tar.gz 归档增量导入人脸库
+    Import {
+        /// 备份文件路径（.tar.gz）
+        backup: String,
     },
 }
 
@@ -578,6 +601,14 @@ fn main() -> anyhow::Result<()> {
                     state.save(&settings.index.config_dir)?;
                     println!("Active workspace set to '{}'", name);
                 }
+                WorkspaceAction::Backup { output, name } => {
+                    let config_db = open_config_db(&settings)?;
+                    video_scene::backup::workspace::backup(&config_db, &name, PathBuf::from(&output).as_path())?;
+                }
+                WorkspaceAction::Import { backup } => {
+                    let config_db = open_config_db(&settings)?;
+                    video_scene::backup::workspace::import(&config_db, PathBuf::from(&backup).as_path())?;
+                }
             }
         }
 
@@ -782,6 +813,15 @@ fn main() -> anyhow::Result<()> {
                             }
                         }
                     }
+                }
+
+                FaceAction::Backup { output } => {
+                    let storage = video_scene::storage::Storage::open(&settings, cli.workspace.as_deref())?;
+                    video_scene::backup::face::backup(&storage.config_db, &storage.config_dir, PathBuf::from(&output).as_path())?;
+                }
+                FaceAction::Import { backup } => {
+                    let mut storage = video_scene::storage::Storage::open(&settings, cli.workspace.as_deref())?;
+                    video_scene::backup::face::import(&mut storage.config_db, &storage.config_dir, PathBuf::from(&backup).as_path())?;
                 }
             }
         }

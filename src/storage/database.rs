@@ -282,6 +282,64 @@ impl Database {
             .map_err(|e| VideoSceneError::DatabaseError(e.to_string()))
     }
 
+    /// 获取指定视频的所有检测记录，用于导入。
+    pub fn get_detections_by_video(&self, video_id: &Uuid) -> Result<Vec<Detection>> {
+        let mut stmt = self.conn
+            .prepare(
+                "SELECT d.id, d.segment_id, d.detection_type, d.label, d.confidence, d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h, d.feature_vector \
+                 FROM detections d \
+                 JOIN segments s ON d.segment_id = s.id \
+                 WHERE s.video_id = ?1"
+            )
+            .map_err(|e| VideoSceneError::DatabaseError(e.to_string()))?;
+
+        let detections = stmt
+            .query_map(params![video_id.to_string()], |row| {
+                let vector_bytes: Vec<u8> = row.get(9)?;
+                let feature_vector: Vec<f32> = serde_json::from_slice(&vector_bytes).unwrap_or_default();
+                let bbox_x: Option<f32> = row.get(5)?;
+                let bbox_y: Option<f32> = row.get(6)?;
+                let bbox_w: Option<f32> = row.get(7)?;
+                let bbox_h: Option<f32> = row.get(8)?;
+                let bounding_box = if bbox_x.is_some() {
+                    Some(crate::models::BoundingBox {
+                        x: bbox_x.unwrap(),
+                        y: bbox_y.unwrap(),
+                        width: bbox_w.unwrap(),
+                        height: bbox_h.unwrap(),
+                    })
+                } else {
+                    None
+                };
+                Ok(Detection {
+                    id: row.get::<_, String>(0)?.parse().unwrap(),
+                    segment_id: row.get::<_, String>(1)?.parse().unwrap(),
+                    detection_type: if row.get::<_, String>(2)? == "face" {
+                        DetectionType::Face
+                    } else {
+                        DetectionType::Object
+                    },
+                    label: row.get(3)?,
+                    confidence: row.get(4)?,
+                    bounding_box,
+                    feature_vector,
+                })
+            })
+            .map_err(|e| VideoSceneError::DatabaseError(e.to_string()))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| VideoSceneError::DatabaseError(e.to_string()))?;
+
+        Ok(detections)
+    }
+
+    /// 重建 FTS 索引，用于导入数据后更新全文检索。
+    pub fn rebuild_fts(&self) -> Result<()> {
+        self.conn
+            .execute_batch("DELETE FROM segments_fts; INSERT INTO segments_fts(rowid, scene_description) SELECT rowid, scene_description FROM segments WHERE scene_description != '';")
+            .map_err(|e| VideoSceneError::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
     // --- 片段 CRUD ---
 
     pub fn insert_segment(&self, segment: &Segment) -> Result<()> {

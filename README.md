@@ -7,6 +7,7 @@
 - **视频索引** — 自动检测场景、提取关键帧、运行 AI 模型（人脸识别、物体检测、VLM 场景描述、文本/图像向量化）
 - **多信号搜索** — 融合人脸、物体、场景 CLIP、BM25 文本、图像相似度五种信号
 - **人脸库管理** — 添加、提取、匹配、重命名人脸
+- **备份与导入** — 人脸库和工作空间数据的打包备份与增量恢复
 - **Web UI** — 内置 React 前端，支持视频播放和相似片段搜索
 - **插件系统** — 守护进程管理 AI 模型进程，空闲自动停止
 - **工作空间** — 支持多工作空间隔离
@@ -118,6 +119,8 @@ vs search [QUERY] [OPTIONS]
 vs workspace init <NAME> [PATH]    # 初始化工作空间
 vs workspace list                  # 列出工作空间
 vs workspace activate <NAME>       # 切换活动工作空间
+vs workspace backup [NAME] <OUTPUT> # 备份工作空间到 tar.gz（默认当前活动工作空间）
+vs workspace import <BACKUP>       # 从 tar.gz 导入到当前工作空间
 ```
 
 ### face — 人脸库管理
@@ -130,6 +133,8 @@ vs face info <NAME>                # 查看人脸详情
 vs face remove <NAME>              # 删除人脸
 vs face rename <NAME> [--new-name] # 重命名
 vs face extract <VIDEO>            # 从视频提取人脸
+vs face backup <OUTPUT>            # 备份人脸库到 tar.gz
+vs face import <BACKUP>            # 从 tar.gz 增量导入人脸库
 ```
 
 ### plugins — 插件管理

@@ -269,4 +269,21 @@ impl ConfigDatabase {
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| VideoSceneError::DatabaseError(e.to_string()))
     }
+
+    /// 获取当前激活的工作区名称。
+    pub fn get_active_workspace(&self) -> Result<String> {
+        let config_dir = std::path::PathBuf::from(self.conn.path().unwrap_or(""))
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_default();
+        let state = crate::config::StateFile::load(&config_dir);
+        Ok(state.active_workspace)
+    }
+
+    /// 获取指定工作区的路径。
+    pub fn get_workspace_path(&self, name: &str) -> Result<std::path::PathBuf> {
+        let entry = self.get_workspace_by_name(name)?
+            .ok_or_else(|| VideoSceneError::PluginConfigError(format!("Workspace '{}' not found", name)))?;
+        Ok(std::path::PathBuf::from(&entry.path))
+    }
 }

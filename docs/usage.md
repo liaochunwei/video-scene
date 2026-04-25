@@ -8,6 +8,7 @@
 - [索引视频](#索引视频)
 - [搜索](#搜索)
 - [人脸库管理](#人脸库管理)
+- [备份与导入](#备份与导入)
 - [Web UI](#web-ui)
 - [配置参考](#配置参考)
 - [插件系统详解](#插件系统详解)
@@ -252,6 +253,76 @@ vs face rename "张三" --new-name "张三丰"
 
 # 删除
 vs face remove "张三"
+```
+
+## 备份与导入
+
+### 人脸库备份
+
+将人脸库数据（特征向量 + 人脸图片）打包为 tar.gz 归档：
+
+```bash
+vs face backup face_backup.tar.gz
+```
+
+归档内容：
+- `manifest.json` — 备份类型和版本
+- `face_library.json` — 所有人脸的名称、图片路径、特征向量
+- `face_library/` — 人脸图片目录
+
+### 人脸库导入
+
+从备份增量导入人脸库，同名人物通过特征向量余弦距离去重（非文件名匹配）：
+
+```bash
+vs face import face_backup.tar.gz
+```
+
+导入逻辑：
+- **新人名** — 直接插入，复制图片
+- **同名人物** — 用 `add_image_if_different` 判断特征向量是否足够不同，仅追加差异足够大的新外观
+- **图片编号** — 新图片从已有最大 index+1 开始，不覆盖已有图片
+
+### 工作空间备份
+
+将指定工作空间的全部数据打包为 tar.gz 归档：
+
+```bash
+# 备份当前活动工作空间
+vs workspace backup workspace_backup.tar.gz
+
+# 备份指定工作空间
+vs workspace backup workspace_backup.tar.gz --name my-project
+```
+
+归档内容：
+- `manifest.json` — 备份类型、版本、工作空间名称
+- `index.db` — 完整 SQLite 数据库（视频、片段、检测记录）
+- `keyframes/` — 关键帧图片
+- `vectors/` — 向量索引文件
+
+### 工作空间导入
+
+从备份逐条视频导入到当前活动工作空间：
+
+```bash
+vs workspace import workspace_backup.tar.gz
+```
+
+导入流程：
+1. 验证归档类型
+2. 逐条视频导入，按源视频目录分组提示路径映射（同一目录只问一次）
+3. 检查新路径文件是否存在，不存在时提示跳过或继续
+4. 关键帧绝对路径自动重写为当前工作空间路径
+5. 导入完成后重建 FTS 索引
+
+交互示例：
+```
+源视频目录: /Users/A/Downloads/xxx/
+请输入对应的新目录路径: /Users/B/Videos/xxx/
+
+文件不存在: /Users/B/Videos/xxx/7621.mp4
+跳过还是继续导入？(s=跳过, c=继续):
 ```
 
 ## Web UI
