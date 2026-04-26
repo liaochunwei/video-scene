@@ -259,22 +259,24 @@ fn import_video(
     // 导入 segments
     let segments = backup_db.get_segments_by_video(&video.id)?;
     for mut seg in segments {
-        // 重写关键帧绝对路径
+        // 重写关键帧绝对路径：将原工作区路径前缀替换为当前工作区路径
         if seg.keyframe_path.starts_with(old_ws_path) {
             seg.keyframe_path = seg.keyframe_path.replace(old_ws_path, new_ws_path);
         }
         current_db.insert_segment(&seg)?;
 
-        // 复制关键帧图片
-        let src_keyframe = tmp_dir.join(&seg.keyframe_path.replace(new_ws_path, old_ws_path));
-        let dst_keyframe = ws_path.join(
-            Path::new(&seg.keyframe_path).strip_prefix(new_ws_path).unwrap_or(Path::new(&seg.keyframe_path))
-        );
-        if src_keyframe.exists() {
-            if let Some(parent) = dst_keyframe.parent() {
-                fs::create_dir_all(parent).ok();
+        // 复制关键帧图片：从解压目录的 keyframes/ 下按相对路径查找
+        // seg.keyframe_path 现在是 {new_ws_path}/keyframes/{vid}/{sid}.jpg
+        // 源文件在 tmp_dir/keyframes/{vid}/{sid}.jpg
+        if let Ok(rel) = Path::new(&seg.keyframe_path).strip_prefix(new_ws_path) {
+            let src_keyframe = tmp_dir.join(rel);
+            let dst_keyframe = ws_path.join(rel);
+            if src_keyframe.exists() {
+                if let Some(parent) = dst_keyframe.parent() {
+                    fs::create_dir_all(parent).ok();
+                }
+                fs::copy(&src_keyframe, &dst_keyframe).ok();
             }
-            fs::copy(&src_keyframe, &dst_keyframe).ok();
         }
     }
 
