@@ -6,6 +6,7 @@ use std::path::Path;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use tar::Archive;
 
@@ -51,6 +52,11 @@ pub fn backup(config_db: &ConfigDatabase, config_dir: &Path, output: &Path) -> c
     let mut encoder = GzEncoder::new(file, Compression::default());
     let mut tar = tar::Builder::new(&mut encoder);
 
+    let pb = ProgressBar::new(exports.len() as u64);
+    pb.set_style(ProgressStyle::with_template(
+        "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}"
+    ).unwrap());
+
     // 写入 manifest.json
     let manifest_json = serde_json::to_string_pretty(&manifest)
         .map_err(|e| crate::error::VideoSceneError::StorageError(e.to_string()))?;
@@ -74,17 +80,19 @@ pub fn backup(config_db: &ConfigDatabase, config_dir: &Path, output: &Path) -> c
     // 写入人脸图片目录
     let face_dir = config_dir.join("face_library");
     if face_dir.exists() {
+        pb.set_message("packing images");
         tar.append_dir_all("face_library", &face_dir)
             .map_err(|e| crate::error::VideoSceneError::StorageError(e.to_string()))?;
     }
 
+    pb.set_message("finalizing");
     tar.finish()
         .map_err(|e| crate::error::VideoSceneError::StorageError(e.to_string()))?;
     drop(tar);
     encoder.finish()
         .map_err(|e| crate::error::VideoSceneError::StorageError(e.to_string()))?;
 
-    println!("Face library backed up: {} faces → {}", exports.len(), output.display());
+    pb.finish_with_message(format!("backed up {} faces → {}", exports.len(), output.display()));
     Ok(())
 }
 
@@ -125,7 +133,13 @@ pub fn import(config_db: &mut ConfigDatabase, config_dir: &Path, backup_path: &P
     let mut added = 0;
     let mut merged = 0;
 
+    let pb = ProgressBar::new(exports.len() as u64);
+    pb.set_style(ProgressStyle::with_template(
+        "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}"
+    ).unwrap());
+
     for export in &exports {
+        pb.set_message(export.name.clone());
         let existing = existing_faces.iter().find(|f| f.name == export.name);
 
         if let Some(existing_entry) = existing {
@@ -163,7 +177,7 @@ pub fn import(config_db: &mut ConfigDatabase, config_dir: &Path, backup_path: &P
             if new_count > 0 {
                 config_db.update_face(&updated)?;
                 merged += 1;
-                println!("Merged {} new appearances into '{}'", new_count, export.name);
+                pb.println(format!("Merged {} new appearances into '{}'", new_count, export.name));
             }
         } else {
             // 新人物：直接插入
@@ -188,10 +202,11 @@ pub fn import(config_db: &mut ConfigDatabase, config_dir: &Path, backup_path: &P
             }
 
             added += 1;
-            println!("Added new face '{}' ({} images)", export.name, export.images.len());
+            pb.println(format!("Added new face '{}' ({} images)", export.name, export.images.len()));
         }
+        pb.inc(1);
     }
 
-    println!("Face import done: {} added, {} merged (total {} in backup)", added, merged, exports.len());
+    pb.finish_with_message(format!("{} added, {} merged", added, merged));
     Ok(())
 }

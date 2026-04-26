@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use tar::Archive;
 
@@ -38,6 +39,12 @@ pub fn backup(config_db: &ConfigDatabase, workspace_name: &Option<String>, outpu
     let mut encoder = GzEncoder::new(file, Compression::default());
     let mut tar = tar::Builder::new(&mut encoder);
 
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(ProgressStyle::with_template(
+        "{spinner:.green} [{elapsed_precise}] {msg}"
+    ).unwrap());
+    pb.set_message("writing manifest");
+
     // 写入 manifest.json
     let manifest_json = serde_json::to_string_pretty(&manifest)
         .map_err(|e| crate::error::VideoSceneError::StorageError(e.to_string()))?;
@@ -49,6 +56,7 @@ pub fn backup(config_db: &ConfigDatabase, workspace_name: &Option<String>, outpu
         .map_err(|e| crate::error::VideoSceneError::StorageError(e.to_string()))?;
 
     // 写入 index.db
+    pb.set_message("packing index.db");
     let db_path = ws_path.join("index.db");
     if db_path.exists() {
         let mut data = Vec::new();
@@ -65,6 +73,7 @@ pub fn backup(config_db: &ConfigDatabase, workspace_name: &Option<String>, outpu
     }
 
     // 写入 keyframes/ 目录
+    pb.set_message("packing keyframes");
     let keyframes_dir = ws_path.join("keyframes");
     if keyframes_dir.exists() {
         tar.append_dir_all("keyframes", &keyframes_dir)
@@ -72,19 +81,21 @@ pub fn backup(config_db: &ConfigDatabase, workspace_name: &Option<String>, outpu
     }
 
     // 写入 vectors/ 目录
+    pb.set_message("packing vectors");
     let vectors_dir = ws_path.join("vectors");
     if vectors_dir.exists() {
         tar.append_dir_all("vectors", &vectors_dir)
             .map_err(|e| crate::error::VideoSceneError::StorageError(e.to_string()))?;
     }
 
+    pb.set_message("finalizing");
     tar.finish()
         .map_err(|e| crate::error::VideoSceneError::StorageError(e.to_string()))?;
     drop(tar);
     encoder.finish()
         .map_err(|e| crate::error::VideoSceneError::StorageError(e.to_string()))?;
 
-    println!("Workspace '{}' backed up → {}", name, output.display());
+    pb.finish_with_message(format!("backed up '{}' → {}", name, output.display()));
     Ok(())
 }
 
@@ -138,6 +149,11 @@ pub fn import(config_db: &ConfigDatabase, backup_path: &Path) -> crate::error::R
     // 查询备份数据库中的所有视频
     let videos = backup_db.list_videos()?;
 
+    let pb = ProgressBar::new(videos.len() as u64);
+    pb.set_style(ProgressStyle::with_template(
+        "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}"
+    ).unwrap());
+
     // 按源视频目录分组，收集路径映射
     let mut dir_mapping: HashMap<String, String> = HashMap::new();
     let mut imported = 0;
@@ -145,6 +161,10 @@ pub fn import(config_db: &ConfigDatabase, backup_path: &Path) -> crate::error::R
     let mut failed = 0;
 
     for video in &videos {
+        let filename = PathBuf::from(&video.path).file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_default();
+        pb.set_message(filename.clone());
         let original_path = PathBuf::from(&video.path);
         let parent_dir = original_path.parent()
             .map(|p| p.to_string_lossy().to_string())
@@ -154,8 +174,10 @@ pub fn import(config_db: &ConfigDatabase, backup_path: &Path) -> crate::error::R
         let new_dir = if let Some(mapped) = dir_mapping.get(&parent_dir) {
             mapped.clone()
         } else {
-            println!("\n源视频目录: {}", parent_dir);
-            println!("请输入对应的新目录路径: ");
+            pb.suspend(|| {
+                println!("\n源视频目录: {}", parent_dir);
+                println!("请输入对应的新目录路径: ");
+            });
             let mut input = String::new();
             if std::io::stdin().read_line(&mut input).is_err() {
                 dir_mapping.insert(parent_dir.clone(), parent_dir.clone());
@@ -168,20 +190,19 @@ pub fn import(config_db: &ConfigDatabase, backup_path: &Path) -> crate::error::R
         };
 
         // 构建新路径
-        let filename = original_path.file_name()
-            .map(|f| f.to_string_lossy().to_string())
-            .unwrap_or_default();
         let new_path = PathBuf::from(&new_dir).join(&filename);
 
         // 检查文件是否存在
         if !new_path.exists() {
-            println!("文件不存在: {}", new_path.display());
-            println!("跳过还是继续导入？(s=跳过, c=继续): ");
+            pb.suspend(|| {
+                println!("文件不存在: {}", new_path.display());
+                println!("跳过还是继续导入？(s=跳过, c=继续): ");
+            });
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).ok();
             if input.trim().to_lowercase() == "s" {
                 skipped += 1;
-                println!("跳过: {}", filename);
+                pb.inc(1);
                 continue;
             }
         }
@@ -194,21 +215,22 @@ pub fn import(config_db: &ConfigDatabase, backup_path: &Path) -> crate::error::R
         match import_video(&backup_db, &current_db, video, &new_path_str, &old_ws_path_str, &new_ws_path_str, &ws_path, tmp_dir.path()) {
             Ok(()) => {
                 imported += 1;
-                println!("导入: {}", filename);
             }
             Err(e) => {
                 failed += 1;
-                eprintln!("导入失败 {}: {}", filename, e);
+                pb.println(format!("导入失败 {}: {}", filename, e));
             }
         }
+        pb.inc(1);
     }
 
     // 重建 FTS 索引
+    pb.set_message("rebuilding FTS");
     if let Err(e) = current_db.rebuild_fts() {
         eprintln!("Warning: FTS rebuild failed: {}", e);
     }
 
-    println!("\n导入完成: {} 导入, {} 跳过, {} 失败 (共 {})", imported, skipped, failed, videos.len());
+    pb.finish_with_message(format!("{} imported, {} skipped, {} failed", imported, skipped, failed));
     Ok(())
 }
 
