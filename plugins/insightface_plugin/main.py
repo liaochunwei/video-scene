@@ -1,5 +1,10 @@
 import sys
 import os
+import warnings
+
+warnings.filterwarnings("ignore", message="Specified provider 'CUDAExecutionProvider'")
+warnings.filterwarnings("ignore", category=FutureWarning, module="insightface")
+
 sys.path.insert(0, str(__import__('pathlib').Path(__file__).parent.parent))
 from plugin_sdk import run_plugin
 
