@@ -174,6 +174,7 @@ def describe_video(data, options, send_progress):
                     {
                         "type": "video_url",
                         "video_url": {"url": f"data:{mime};base64,{video_b64}"},
+                        "fps": int(fps),
                     },
                     {"type": "text", "text": "这是一个视频文件，请分析！"},
                 ],
