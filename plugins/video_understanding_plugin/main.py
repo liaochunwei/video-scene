@@ -83,6 +83,29 @@ def _is_valid_segments(segments):
     return False
 
 
+def _check_segment_durations(segments):
+    """检查片段时长，超过一半小于1秒则认为VLM理解有误。"""
+    if not segments:
+        return
+    short_count = 0
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        start = seg.get("片段开始", 0)
+        end = seg.get("片段结束", 0)
+        try:
+            duration = float(end) - float(start)
+        except (TypeError, ValueError):
+            continue
+        if duration < 1.0:
+            short_count += 1
+    if short_count > len(segments) / 2:
+        raise RuntimeError(
+            f"VLM segments quality check failed: {short_count}/{len(segments)} segments < 1s, "
+            "likely a misunderstanding by the model"
+        )
+
+
 def _preprocess_video(video_path, max_pixels, fps):
     probe = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0",
@@ -191,6 +214,7 @@ def describe_video(data, options, send_progress):
             segments = _parse_segments(raw_text)
 
             if segments and _is_valid_segments(segments):
+                _check_segment_durations(segments)
                 break
             if attempt < max_retries:
                 print(f"WARNING: VLM API invalid format (attempt {attempt+1}, temp={temp:.1f}), retrying...", file=sys.stderr)
