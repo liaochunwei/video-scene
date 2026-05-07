@@ -20,4 +20,5 @@ dependencies = [
     "mlx-vlm>=0.1",
     "transformers>=4.40",
     "huggingface_hub>=0.20",
+    "openai>=1.0",
 ]

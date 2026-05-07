@@ -4,8 +4,8 @@ import json
 import base64
 import tempfile
 import subprocess
-import urllib.request
-import urllib.error
+
+from openai import OpenAI
 
 sys.path.insert(0, str(__import__('pathlib').Path(__file__).parent.parent))
 from plugin_sdk import run_plugin
@@ -44,7 +44,7 @@ SYSTEM_VIDEO_PROMPT = """# 你是一个视觉识别专家，将这个视频按 *
 
 
 def _strip_thinking(text):
-    think_close = ""
+    think_close = "</think>"
     pos = text.find(think_close)
     if pos != -1:
         return text[pos + len(think_close):].strip()
@@ -127,46 +127,20 @@ def _preprocess_video(video_path, max_pixels, fps):
 
 
 def _call_api(api_base, api_key, model, messages, max_tokens=24*1024, temperature=0.6):
-    url = f"{api_base.rstrip('/')}/chat/completions"
-    payload = json.dumps({
-        "model": model,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "stream": True,
-        "enable_thinking": True,
-    }).encode("utf-8")
+    client = OpenAI(
+        api_key=api_key or "dummy",
+        base_url=api_base,
+    )
 
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+    completion = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        extra_body={"enable_thinking": True},
+    )
 
-    req = urllib.request.Request(url, data=payload, headers=headers)
-    full_content = ""
-    try:
-        with urllib.request.urlopen(req, timeout=600) as resp:
-            for line in resp:
-                line = line.decode("utf-8", errors="replace").strip()
-                if not line.startswith("data: "):
-                    continue
-                data = line[6:]
-                if data == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(data)
-                except json.JSONDecodeError:
-                    continue
-                delta = chunk.get("choices", [{}])[0].get("delta", {})
-                content = delta.get("content", "")
-                if content:
-                    full_content += content
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"API error {e.code}: {body}")
-    except Exception as e:
-        raise RuntimeError(f"API request failed: {e}")
-
-    return full_content
+    return completion.choices[0].message.content or ""
 
 
 def describe_video(data, options, send_progress):
@@ -200,7 +174,6 @@ def describe_video(data, options, send_progress):
                     {
                         "type": "video_url",
                         "video_url": {"url": f"data:{mime};base64,{video_b64}"},
-                        "fps": fps,
                     },
                     {"type": "text", "text": "这是一个视频文件，请分析！"},
                 ],
