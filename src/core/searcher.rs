@@ -262,17 +262,6 @@ pub fn search(
 
     results.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
 
-    // 去重后过滤掉被归入其他结果 `more` 列表的非主结果
-    if dedup {
-        // 统计每个视频在结果中出现的次数
-        let mut video_counts: HashMap<uuid::Uuid, usize> = HashMap::new();
-        for r in &results {
-            *video_counts.entry(r.video.id).or_insert(0) += 1;
-        }
-        // 只保留主结果（有 more）或该视频的唯一结果
-        results.retain(|r| !r.more.is_empty() || video_counts.get(&r.video.id) == Some(&1));
-    }
-
     // 分页
     let total = results.len();
     let start = (page - 1) * page_size;
@@ -764,7 +753,7 @@ fn merge_signals(signals: Vec<SignalScore>, threshold: f32) -> Vec<SearchResult>
 }
 
 /// 按视频去重：同一视频只保留最高置信度的片段作为主结果，
-/// 其余片段归入主结果的 `more` 列表。
+/// 其余片段归入主结果的 `more` 列表，非主结果直接移除。
 ///
 /// 这样用户看到的是"每个视频一个条目"，而非同一视频重复出现多次。
 fn dedup_results(mut results: Vec<SearchResult>) -> Vec<SearchResult> {
@@ -808,12 +797,18 @@ fn dedup_results(mut results: Vec<SearchResult>) -> Vec<SearchResult> {
         segs.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
     }
 
-    // 将 more 列表挂到主结果上
-    for (i, r) in results.iter_mut().enumerate() {
+    // 将 more 列表挂到主结果上，同时移除非主结果
+    let best_indices: std::collections::HashSet<usize> = best_per_video.values().copied().collect();
+    let mut retained = Vec::with_capacity(best_indices.len());
+    for (i, mut r) in results.into_iter().enumerate() {
+        if !best_indices.contains(&i) {
+            continue;
+        }
         if let Some(segs) = more_map.remove(&i) {
             r.more = segs;
         }
+        retained.push(r);
     }
 
-    results
+    retained
 }
